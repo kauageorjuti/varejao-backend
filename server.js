@@ -121,10 +121,16 @@ app.post('/register', async (req, res) => {
         if (error) throw error;
         
         // Envia email sem esperar (para ser rápido)
-        enviarEmail(email, 'Bem-vindo ao Varejão!', templateBoasVindas(name));
+       enviarEmail(
+            email, 
+            'Bem-vindo ao Varejão! 🍎', 
+            templateBoasVindas(name)
+        );
         
         res.status(201).json({ message: 'Usuário cadastrado com sucesso!' });
+
     } catch (error) {
+        console.error("Erro no cadastro:", error);
         res.status(500).json({ error: error.message });
     }
 });
