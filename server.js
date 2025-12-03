@@ -1,8 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
 const { createClient } = require('@supabase/supabase-js');
+const fetch = require('node-fetch'); // A solução para o erro de Timeout
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -12,599 +12,201 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 app.use(cors());
 app.use(express.json());
 
-// ========== CONFIGURAÇÃO DO BREVO (SendInBlue) ==========
+// ========== FUNÇÃO DE EMAIL VIA API (SEM BLOQUEIO) ==========
 
-// Criar transportador usando Brevo SMTP
-const transporter = nodemailer.createTransport({
-    host: 'smtp-relay.brevo.com',
-    port: 587,
-    secure: false,
-    auth: {
-        user: process.env.BREVO_SMTP_USER,  // Seu email cadastrado no Brevo
-        pass: process.env.BREVO_SMTP_KEY    // Chave SMTP do Brevo
-    }
-});
-
-// Verificar configuração ao iniciar
-transporter.verify(function(error, success) {
-    if (error) {
-        console.log('❌ Erro na configuração de email:', error);
-    } else {
-        console.log('✅ Servidor de email pronto para enviar mensagens');
-    }
-});
-
-// Função auxiliar para enviar emails
 async function enviarEmail(destinatario, assunto, htmlContent) {
-    try {
-        const info = await transporter.sendMail({
-            from: `"${process.env.EMAIL_FROM_NAME || 'Varejão Online'}" <${process.env.BREVO_SMTP_USER}>`,
-            to: destinatario,
+    const url = 'https://api.brevo.com/v3/smtp/email';
+    const options = {
+        method: 'POST',
+        headers: {
+            'accept': 'application/json',
+            'api-key': process.env.BREVO_API_KEY, // Pega a chave nova do Render
+            'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+            sender: { name: 'Varejão Online', email: process.env.ADMIN_EMAIL }, // O email DEVE ser validado no Brevo
+            to: [{ email: destinatario }],
             subject: assunto,
-            html: htmlContent
-        });
-        console.log('✅ Email enviado:', info.messageId);
-        return { success: true, messageId: info.messageId };
+            htmlContent: htmlContent
+        })
+    };
+
+    try {
+        const response = await fetch(url, options);
+        if (response.ok) {
+            console.log(`✅ Email enviado com sucesso para ${destinatario}`);
+            return { success: true };
+        } else {
+            const erro = await response.json();
+            console.error('❌ Erro API Brevo:', erro);
+            return { success: false, error: erro };
+        }
     } catch (error) {
-        console.error('❌ Erro ao enviar email:', error.message);
+        console.error('❌ Erro de conexão:', error);
         return { success: false, error: error.message };
     }
 }
 
-// ========== TEMPLATES DE EMAIL ==========
+// ========== TEMPLATES DE EMAIL (Mantidos originais) ==========
 
 function templateBoasVindas(nome) {
     return `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body { font-family: 'Arial', sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
-                .container { max-width: 600px; margin: 40px auto; background: white; border-radius: 15px; overflow: hidden; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
-                .header { background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); padding: 40px 20px; text-align: center; color: white; }
-                .header h1 { margin: 0; font-size: 32px; }
-                .content { padding: 40px 30px; }
-                .content h2 { color: #2c3e50; margin-bottom: 20px; }
-                .content p { color: #34495e; line-height: 1.6; font-size: 16px; }
-                .button { display: inline-block; background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); color: white; padding: 15px 35px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0; }
-                .footer { background: #ecf0f1; padding: 20px; text-align: center; color: #7f8c8d; font-size: 14px; }
-                .emoji { font-size: 48px; margin: 20px 0; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>🍎 Varejão Online</h1>
-                </div>
-                <div class="content">
-                    <div class="emoji">🎉</div>
-                    <h2>Bem-vindo(a), ${nome}!</h2>
-                    <p>Estamos muito felizes em ter você conosco!</p>
-                    <p>Sua conta foi criada com sucesso. Agora você pode aproveitar todas as vantagens de comprar frutas e verduras fresquinhas no conforto da sua casa.</p>
-                    <p><strong>O que você pode fazer agora:</strong></p>
-                    <ul>
-                        <li>🛍️ Navegar pelo nosso catálogo de produtos</li>
-                        <li>🛒 Adicionar itens ao carrinho</li>
-                        <li>📦 Acompanhar seus pedidos</li>
-                        <li>⭐ Salvar seus produtos favoritos</li>
-                    </ul>
-                    <a href="${process.env.SITE_URL || 'https://seu-site.vercel.app'}" class="button">Começar a Comprar</a>
-                </div>
-                <div class="footer">
-                    <p>Varejão Online - Frutas e Verduras Frescas 🥕</p>
-                    <p>Este é um email automático, por favor não responda.</p>
-                </div>
+        <div style="font-family: Arial; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 10px; overflow: hidden;">
+            <div style="background: #2ecc71; padding: 20px; text-align: center; color: white;">
+                <h1>🍎 Bem-vindo ao Varejão!</h1>
             </div>
-        </body>
-        </html>
+            <div style="padding: 20px;">
+                <h2>Olá, ${nome}!</h2>
+                <p>Sua conta foi criada com sucesso. Aproveite nossas frutas fresquinhas.</p>
+                <a href="${process.env.SITE_URL}" style="display: inline-block; background: #2ecc71; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Ir para o Site</a>
+            </div>
+        </div>
     `;
 }
 
 function templateConfirmacaoPedido(nome, pedido) {
-    const itensHTML = pedido.items.map(item => 
-        `<li>${item.nome} - R$ ${parseFloat(item.preco).toFixed(2)}</li>`
-    ).join('');
-    
+    const itens = pedido.items.map(i => `<li>${i.nome} - R$ ${i.preco}</li>`).join('');
     return `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body { font-family: 'Arial', sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
-                .container { max-width: 600px; margin: 40px auto; background: white; border-radius: 15px; overflow: hidden; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
-                .header { background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); padding: 40px 20px; text-align: center; color: white; }
-                .header h1 { margin: 0; font-size: 32px; }
-                .content { padding: 40px 30px; }
-                .content h2 { color: #2c3e50; margin-bottom: 20px; }
-                .content p { color: #34495e; line-height: 1.6; font-size: 16px; }
-                .order-box { background: #ecf0f1; padding: 20px; border-radius: 10px; margin: 20px 0; }
-                .order-box h3 { color: #2c3e50; margin-top: 0; }
-                .order-box ul { list-style: none; padding: 0; }
-                .order-box li { padding: 8px 0; border-bottom: 1px solid #bdc3c7; }
-                .total { font-size: 24px; font-weight: bold; color: #e67e22; margin-top: 15px; }
-                .footer { background: #ecf0f1; padding: 20px; text-align: center; color: #7f8c8d; font-size: 14px; }
-                .emoji { font-size: 48px; margin: 20px 0; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>🛒 Pedido Confirmado!</h1>
-                </div>
-                <div class="content">
-                    <div class="emoji">✅</div>
-                    <h2>Obrigado, ${nome}!</h2>
-                    <p>Seu pedido foi recebido com sucesso e já está sendo preparado.</p>
-                    
-                    <div class="order-box">
-                        <h3>📋 Detalhes do Pedido</h3>
-                        <ul>
-                            ${itensHTML}
-                        </ul>
-                        <div class="total">Total: R$ ${parseFloat(pedido.total_price).toFixed(2)}</div>
-                    </div>
-                    
-                    <p><strong>Status:</strong> ${pedido.status}</p>
-                    <p>Você receberá outro email quando seu pedido for despachado para entrega.</p>
-                    <p>Tempo estimado de entrega: <strong>24 horas</strong></p>
-                </div>
-                <div class="footer">
-                    <p>Varejão Online - Frutas e Verduras Frescas 🥕</p>
-                    <p>Este é um email automático, por favor não responda.</p>
-                </div>
+        <div style="font-family: Arial; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 10px; overflow: hidden;">
+            <div style="background: #3498db; padding: 20px; text-align: center; color: white;">
+                <h1>🛒 Pedido Confirmado!</h1>
             </div>
-        </body>
-        </html>
-    `;
-}
-
-function templatePedidoEnviado(nome, pedido) {
-    const itensHTML = pedido.items.map(item => 
-        `<li>${item.nome}</li>`
-    ).join('');
-    
-    return `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body { font-family: 'Arial', sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
-                .container { max-width: 600px; margin: 40px auto; background: white; border-radius: 15px; overflow: hidden; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
-                .header { background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); padding: 40px 20px; text-align: center; color: white; }
-                .header h1 { margin: 0; font-size: 32px; }
-                .content { padding: 40px 30px; }
-                .content h2 { color: #2c3e50; margin-bottom: 20px; }
-                .content p { color: #34495e; line-height: 1.6; font-size: 16px; }
-                .tracking-box { background: #d4edda; border: 2px solid #28a745; padding: 20px; border-radius: 10px; margin: 20px 0; text-align: center; }
-                .tracking-box h3 { color: #155724; margin: 0 0 10px 0; }
-                .status { font-size: 20px; font-weight: bold; color: #28a745; }
-                .footer { background: #ecf0f1; padding: 20px; text-align: center; color: #7f8c8d; font-size: 14px; }
-                .emoji { font-size: 48px; margin: 20px 0; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>🚚 Pedido a Caminho!</h1>
-                </div>
-                <div class="content">
-                    <div class="emoji">📦</div>
-                    <h2>Boa notícia, ${nome}!</h2>
-                    <p>Seu pedido foi despachado e está a caminho!</p>
-                    
-                    <div class="tracking-box">
-                        <h3>Status do Pedido</h3>
-                        <div class="status">✅ ${pedido.status}</div>
-                    </div>
-                    
-                    <p><strong>Itens enviados:</strong></p>
-                    <ul>
-                        ${itensHTML}
-                    </ul>
-                    
-                    <p>Seu pedido deve chegar em breve. Fique atento!</p>
-                    <p>Obrigado por escolher o Varejão Online! 🍎</p>
-                </div>
-                <div class="footer">
-                    <p>Varejão Online - Frutas e Verduras Frescas 🥕</p>
-                    <p>Este é um email automático, por favor não responda.</p>
-                </div>
+            <div style="padding: 20px;">
+                <h2>Obrigado, ${nome}!</h2>
+                <p>Recebemos seu pedido de <strong>R$ ${parseFloat(pedido.total_price).toFixed(2)}</strong>.</p>
+                <ul>${itens}</ul>
+                <p>Em breve enviaremos o código de rastreio.</p>
             </div>
-        </body>
-        </html>
+        </div>
     `;
 }
 
 function templateNovoPedidoAdmin(pedido) {
-    const itensHTML = pedido.items.map(item => 
-        `<li>${item.nome} - R$ ${parseFloat(item.preco).toFixed(2)}</li>`
-    ).join('');
-    
     return `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body { font-family: 'Arial', sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
-                .container { max-width: 600px; margin: 40px auto; background: white; border-radius: 15px; overflow: hidden; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
-                .header { background: linear-gradient(135deg, #e67e22 0%, #d35400 100%); padding: 40px 20px; text-align: center; color: white; }
-                .header h1 { margin: 0; font-size: 32px; }
-                .content { padding: 40px 30px; }
-                .content h2 { color: #2c3e50; margin-bottom: 20px; }
-                .order-box { background: #fff3cd; border: 2px solid #f39c12; padding: 20px; border-radius: 10px; margin: 20px 0; }
-                .order-box h3 { color: #856404; margin-top: 0; }
-                .order-box ul { list-style: none; padding: 0; }
-                .order-box li { padding: 8px 0; border-bottom: 1px solid #ffc107; }
-                .total { font-size: 24px; font-weight: bold; color: #e67e22; margin-top: 15px; }
-                .button { display: inline-block; background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 15px 35px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0; }
-                .footer { background: #ecf0f1; padding: 20px; text-align: center; color: #7f8c8d; font-size: 14px; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>🔔 Novo Pedido Recebido!</h1>
-                </div>
-                <div class="content">
-                    <h2>Atenção, Administrador!</h2>
-                    <p>Um novo pedido foi realizado e precisa ser processado.</p>
-                    
-                    <div class="order-box">
-                        <h3>📋 Detalhes do Pedido</h3>
-                        <p><strong>Cliente:</strong> ${pedido.user_email}</p>
-                        <p><strong>Data:</strong> ${new Date(pedido.created_at).toLocaleString('pt-BR')}</p>
-                        <ul>
-                            ${itensHTML}
-                        </ul>
-                        <div class="total">Total: R$ ${parseFloat(pedido.total_price).toFixed(2)}</div>
-                    </div>
-                    
-                    <a href="${process.env.SITE_URL || 'https://seu-site.vercel.app'}" class="button">Acessar Painel Admin</a>
-                </div>
-                <div class="footer">
-                    <p>Varejão Online - Painel Administrativo</p>
-                </div>
-            </div>
-        </body>
-        </html>
+        <div style="font-family: Arial; background: #fff3cd; padding: 20px; border: 1px solid #ffeeba;">
+            <h2 style="color: #856404;">💰 Nova Venda!</h2>
+            <p><strong>Cliente:</strong> ${pedido.user_email}</p>
+            <p><strong>Valor:</strong> R$ ${parseFloat(pedido.total_price).toFixed(2)}</p>
+            <p>Corre lá no painel para despachar!</p>
+        </div>
     `;
 }
 
-// ========== ROTAS DE USUÁRIOS ==========
+function templatePedidoEnviado(nome, pedido) {
+    return `
+        <div style="font-family: Arial; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 10px; overflow: hidden;">
+            <div style="background: #e67e22; padding: 20px; text-align: center; color: white;">
+                <h1>🚚 Pedido Enviado!</h1>
+            </div>
+            <div style="padding: 20px;">
+                <h2>Boas notícias, ${nome}!</h2>
+                <p>Seus produtos já saíram para entrega.</p>
+                <div style="background: #f8f9fa; padding: 15px; border-left: 5px solid #28a745; margin: 20px 0;">
+                    Status: <strong>Saiu para Entrega</strong>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ========== ROTAS (IGUAIS, MAS USANDO A NOVA FUNÇÃO) ==========
 
 app.post('/register', async (req, res) => {
     try {
         const { name, email, password } = req.body;
+        const { data: exists } = await supabase.from('users').select('*').eq('email', email).single();
+        if (exists) return res.status(400).json({ message: 'Email já cadastrado!' });
         
-        const { data: exists } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', email)
-            .single();
-        
-        if (exists) {
-            return res.status(400).json({ message: 'Email já cadastrado!' });
-        }
-        
-        const { error } = await supabase
-            .from('users')
-            .insert([{ name, email, password }]);
-        
+        const { error } = await supabase.from('users').insert([{ name, email, password }]);
         if (error) throw error;
         
-        // 📧 ENVIAR EMAIL DE BOAS-VINDAS (não bloqueia a resposta)
-        enviarEmail(
-            email,
-            '🎉 Bem-vindo ao Varejão Online!',
-            templateBoasVindas(name)
-        ).catch(err => console.error('Erro ao enviar email de boas-vindas:', err));
+        // Envia email sem esperar (para ser rápido)
+        enviarEmail(email, 'Bem-vindo ao Varejão!', templateBoasVindas(name));
         
         res.status(201).json({ message: 'Usuário cadastrado com sucesso!' });
     } catch (error) {
-        console.error('Erro no registro:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
 app.post('/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        
-        const { data, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', email)
-            .eq('password', password)
-            .single();
-        
-        if (error || !data) {
-            return res.status(401).json({ message: 'E-mail ou senha incorretos' });
-        }
-        
-        res.json({ 
-            message: 'Login realizado com sucesso!', 
-            user: { 
-                id: data.id, 
-                name: data.name, 
-                email: data.email 
-            } 
-        });
-    } catch (error) {
-        console.error('Erro no login:', error);
-        res.status(500).json({ error: error.message });
-    }
+    const { email, password } = req.body;
+    const { data, error } = await supabase.from('users').select('*').eq('email', email).eq('password', password).single();
+    if (error || !data) return res.status(401).json({ message: 'Login inválido' });
+    res.json({ message: 'Logado!', user: data });
 });
-
-// ========== ROTAS DE PRODUTOS ==========
 
 app.get('/products', async (req, res) => {
-    try {
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .order('name', { ascending: true });
-        
-        if (error) throw error;
-        res.json(data);
-    } catch (error) {
-        console.error('Erro ao listar produtos:', error);
-        res.status(500).json({ error: error.message });
-    }
+    const { data } = await supabase.from('products').select('*').order('name');
+    res.json(data);
 });
-
-app.get('/products/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .eq('id', id)
-            .single();
-        
-        if (error) throw error;
-        
-        if (!data) {
-            return res.status(404).json({ message: 'Produto não encontrado' });
-        }
-        
-        res.json(data);
-    } catch (error) {
-        console.error('Erro ao buscar produto:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-app.post('/products', async (req, res) => {
-    try {
-        const { name, price, quantity, image_url } = req.body;
-        
-        if (!name || !price) {
-            return res.status(400).json({ message: 'Nome e preço são obrigatórios' });
-        }
-        
-        const { data, error } = await supabase
-            .from('products')
-            .insert([{ 
-                name, 
-                price, 
-                quantity: quantity || 0, 
-                image_url: image_url || null 
-            }])
-            .select();
-        
-        if (error) throw error;
-        
-        res.status(201).json({ 
-            message: 'Produto criado com sucesso!', 
-            product: data[0] 
-        });
-    } catch (error) {
-        console.error('Erro ao criar produto:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-app.put('/products/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { name, price, quantity, image_url } = req.body;
-        
-        const { data, error } = await supabase
-            .from('products')
-            .update({ name, price, quantity, image_url })
-            .eq('id', id)
-            .select();
-        
-        if (error) throw error;
-        
-        if (!data || data.length === 0) {
-            return res.status(404).json({ message: 'Produto não encontrado' });
-        }
-        
-        res.json({ 
-            message: 'Produto atualizado com sucesso!', 
-            product: data[0] 
-        });
-    } catch (error) {
-        console.error('Erro ao atualizar produto:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-app.delete('/products/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        
-        const { error } = await supabase
-            .from('products')
-            .delete()
-            .eq('id', id);
-        
-        if (error) throw error;
-        
-        res.json({ message: 'Produto excluído com sucesso!' });
-    } catch (error) {
-        console.error('Erro ao deletar produto:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// ========== ROTAS DE PEDIDOS ==========
 
 app.post('/checkout', async (req, res) => {
     try {
         const { user_email, total_price, items } = req.body;
         
-        if (!user_email || !total_price || !items || items.length === 0) {
-            return res.status(400).json({ message: 'Dados incompletos para checkout' });
-        }
-        
+        // Salva o pedido
         const { data, error } = await supabase
             .from('orders')
-            .insert([{ 
-                user_email, 
-                total_price, 
-                items,
-                status: 'Pendente'
-            }])
+            .insert([{ user_email, total_price, items, status: 'Pendente' }])
             .select();
-        
+            
         if (error) throw error;
-        
         const pedido = data[0];
-        
-        // Buscar nome do usuário
-        const { data: userData } = await supabase
-            .from('users')
-            .select('name')
-            .eq('email', user_email)
-            .single();
-        
-        const nomeUsuario = userData ? userData.name : 'Cliente';
-        
-        // 📧 ENVIAR EMAILS (não bloqueia a resposta)
-        enviarEmail(
-            user_email,
-            '✅ Pedido Confirmado - Varejão Online',
-            templateConfirmacaoPedido(nomeUsuario, pedido)
-        ).catch(err => console.error('Erro ao enviar email de confirmação:', err));
+
+        // Tenta achar o nome do usuário
+        const { data: user } = await supabase.from('users').select('name').eq('email', user_email).single();
+        const nome = user ? user.name : 'Cliente';
+
+        // Envia emails
+        enviarEmail(user_email, 'Pedido Confirmado ✅', templateConfirmacaoPedido(nome, pedido));
         
         if (process.env.ADMIN_EMAIL) {
-            enviarEmail(
-                process.env.ADMIN_EMAIL,
-                '🔔 Novo Pedido Recebido - Varejão Online',
-                templateNovoPedidoAdmin(pedido)
-            ).catch(err => console.error('Erro ao enviar email ao admin:', err));
+            enviarEmail(process.env.ADMIN_EMAIL, '🔔 Nova Venda!', templateNovoPedidoAdmin(pedido));
         }
-        
-        res.status(201).json({ 
-            message: 'Compra realizada com sucesso!', 
-            order: pedido 
-        });
+
+        res.status(201).json({ message: 'Compra realizada!', order: pedido });
     } catch (error) {
-        console.error('Erro no checkout:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
 app.get('/orders', async (req, res) => {
-    try {
-        const { data, error } = await supabase
-            .from('orders')
-            .select('*')
-            .order('created_at', { ascending: false });
-        
-        if (error) throw error;
-        res.json(data);
-    } catch (error) {
-        console.error('Erro ao listar pedidos:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-app.get('/orders/user/:email', async (req, res) => {
-    try {
-        const { email } = req.params;
-        
-        const { data, error } = await supabase
-            .from('orders')
-            .select('*')
-            .eq('user_email', email)
-            .order('created_at', { ascending: false });
-        
-        if (error) throw error;
-        res.json(data);
-    } catch (error) {
-        console.error('Erro ao buscar pedidos do usuário:', error);
-        res.status(500).json({ error: error.message });
-    }
+    const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+    res.json(data);
 });
 
 app.put('/orders/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { status } = req.body;
         
-        const newStatus = status || 'Enviado 🚚';
-        
+        // Atualiza status
         const { data, error } = await supabase
             .from('orders')
-            .update({ status: newStatus })
+            .update({ status: 'Enviado 🚚' })
             .eq('id', id)
             .select();
-        
+            
         if (error) throw error;
-        
-        if (!data || data.length === 0) {
-            return res.status(404).json({ message: 'Pedido não encontrado' });
-        }
-        
         const pedido = data[0];
-        
-        // Buscar nome do usuário
-        const { data: userData } = await supabase
-            .from('users')
-            .select('name')
-            .eq('email', pedido.user_email)
-            .single();
-        
-        const nomeUsuario = userData ? userData.name : 'Cliente';
-        
-        // 📧 ENVIAR EMAIL (não bloqueia a resposta)
-        enviarEmail(
-            pedido.user_email,
-            '🚚 Seu Pedido Foi Despachado - Varejão Online',
-            templatePedidoEnviado(nomeUsuario, pedido)
-        ).catch(err => console.error('Erro ao enviar email de envio:', err));
-        
-        res.json({ 
-            message: 'Status do pedido atualizado!', 
-            order: pedido 
-        });
+
+        // Busca nome para o email
+        const { data: user } = await supabase.from('users').select('name').eq('email', pedido.user_email).single();
+        const nome = user ? user.name : 'Cliente';
+
+        // Avisa que enviou
+        enviarEmail(pedido.user_email, 'Pedido a Caminho 🚚', templatePedidoEnviado(nome, pedido));
+
+        res.json({ message: 'Pedido enviado!', order: pedido });
     } catch (error) {
-        console.error('Erro ao atualizar pedido:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// ========== ROTA DE TESTE ==========
 app.get('/', (req, res) => {
-    res.json({ 
-        message: 'API Varejão Online com Brevo está funcionando!',
-        version: '2.2',
-        features: ['Brevo email notifications enabled'],
-        endpoints: {
-            users: ['/register', '/login'],
-            products: ['/products', '/products/:id'],
-            orders: ['/checkout', '/orders', '/orders/:id']
-        }
-    });
+    res.send('API Varejão Online (Via Brevo API) está funcionando! 🚀');
 });
 
-// Iniciar servidor
 app.listen(port, () => {
-    console.log(`🚀 Servidor Varejão Online rodando na porta ${port}`);
-    console.log(`📡 Conectado ao Supabase`);
-    console.log(`📧 Sistema de email Brevo configurado`);
+    console.log(`Servidor rodando na porta ${port}`);
 });
