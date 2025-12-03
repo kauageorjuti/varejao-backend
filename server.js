@@ -12,6 +12,14 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 app.use(cors());
 app.use(express.json());
 
+console.log('📧 Configuração de Email:', {
+    user: process.env.EMAIL_USER ? '✅ Configurado' : '❌ Faltando',
+    pass: process.env.EMAIL_PASSWORD ? '✅ Configurado' : '❌ Faltando',
+    admin: process.env.ADMIN_EMAIL ? '✅ Configurado' : '❌ Faltando',
+    site: process.env.SITE_URL ? '✅ Configurado' : '❌ Faltando'
+});
+
+
 // ========== CONFIGURAÇÃO DO NODEMAILER ==========
 
 // Criar transportador de email
