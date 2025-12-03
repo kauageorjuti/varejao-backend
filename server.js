@@ -16,12 +16,18 @@ app.use(express.json());
 
 // Criar transportador de email
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // Pode usar: gmail, outlook, yahoo, etc.
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
     auth: {
-        user: process.env.EMAIL_USER,     // Seu email
-        pass: process.env.EMAIL_PASSWORD  // Senha de app do Gmail
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD
+    },
+    tls: {
+        rejectUnauthorized: false
     }
 });
+
 
 // Função auxiliar para enviar emails
 async function enviarEmail(destinatario, assunto, htmlContent) {
